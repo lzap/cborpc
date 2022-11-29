@@ -1,0 +1,5 @@
+Go and Python subprocess IPC via process pipes and Go net/rpc CBOR serialization.
+
+The Python code requires "cbor2" package to be installed.
+
+    go run main.go
