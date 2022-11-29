@@ -8,8 +8,10 @@ import (
 	"net/rpc"
 	"os/exec"
 	"syscall"
+	"time"
 
 	"github.com/lzap/cborpc/codec"
+	"github.com/lzap/cborpc/log"
 )
 
 type readWriteCloser struct {
@@ -26,8 +28,9 @@ func (rwc *readWriteCloser) Write(p []byte) (int, error) {
 }
 
 func (rwc *readWriteCloser) Close() error {
-	rwc.writer.Close()
-	return rwc.reader.Close()
+	err := rwc.writer.Close()
+	err = rwc.reader.Close()
+	return err
 }
 
 type Command struct {
@@ -40,6 +43,8 @@ type Command struct {
 
 func NewCommand(ctx context.Context, name string, arg ...string) (*Command, error) {
 	cmd := exec.Command(name, arg...)
+	logger := log.ContextLogger(ctx)
+	logger.Msgf(log.TRC, "Executing command %s with arguments %v", name, arg)
 
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
@@ -82,13 +87,21 @@ func (cmd *Command) Start(ctx context.Context) error {
 }
 
 func (cmd *Command) readerStderr(ctx context.Context) {
+	logger := log.ContextLogger(ctx)
+	logger.Msgf(log.TRC, "Starting stderr reader")
+	defer logger.Msgf(log.TRC, "Stopping stderr reader")
+
 	scanner := bufio.NewScanner(cmd.stderr)
 	for scanner.Scan() {
-		fmt.Println(scanner.Text())
+		logger.Msgf(log.WRN, "[%d] %s", cmd.cmd.Process.Pid, scanner.Text())
 	}
 }
 
 func (cmd *Command) Stop(ctx context.Context) error {
+	logger := log.ContextLogger(ctx)
+	logger.Msgf(log.TRC, "Stopping RPC client, terminating process, waiting for data")
+	defer logger.Msgf(log.TRC, "All data processed")
+
 	err := cmd.client.Close()
 	if err != nil {
 		return err
@@ -103,10 +116,27 @@ func (cmd *Command) Stop(ctx context.Context) error {
 	return err
 }
 
-func (cmd *Command) Call(serviceMethod string, args any, reply any) error {
-	return cmd.client.Call(serviceMethod, args, reply)
+func (cmd *Command) Call(ctx context.Context, serviceMethod string, args any, reply any) error {
+	logger := log.ContextLogger(ctx)
+	start := time.Now()
+	logger.Msgf(log.TRC, "Call: %s started", serviceMethod)
+	defer logger.Msgf(log.TRC, "Call: %s finished, duration: %s", serviceMethod, time.Since(start))
+
+	err := cmd.client.Call(serviceMethod, args, reply)
+	if err != nil {
+		logger.Msgf(log.WRN, "Call: %s returned an error %s", serviceMethod, err.Error())
+	}
+
+	return err
 }
 
-func (cmd *Command) Go(serviceMethod string, args any, reply any, done chan *rpc.Call) *rpc.Call {
-	return cmd.client.Go(serviceMethod, args, reply, done)
+func (cmd *Command) Go(ctx context.Context, serviceMethod string, args any, reply any, done chan *rpc.Call) *rpc.Call {
+	logger := log.ContextLogger(ctx)
+	start := time.Now()
+	logger.Msgf(log.TRC, "Do: %s started", serviceMethod)
+	defer logger.Msgf(log.TRC, "Call: %s finished, duration: %s", serviceMethod, time.Since(start))
+
+	call := cmd.client.Go(serviceMethod, args, reply, done)
+
+	return call
 }

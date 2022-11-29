@@ -4,10 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
+	"os"
 	"os/exec"
 
 	"github.com/lzap/cborpc/cmd"
+	"github.com/lzap/cborpc/log"
 )
 
 type Args struct {
@@ -15,11 +16,19 @@ type Args struct {
 }
 
 func main() {
-	proc, err := cmd.NewCommand(context.TODO(), "python3", "server.py")
+	ctx := log.ContextWithStdoutLogger(context.Background())
+	logger := log.ContextLogger(ctx)
+
+	script := "server.py"
+	if len(os.Args) > 1 {
+		script = os.Args[1]
+	}
+
+	proc, err := cmd.NewCommand(ctx, "python3", script)
 	if err != nil {
 		panic(err)
 	}
-	err = proc.Start(context.TODO())
+	err = proc.Start(ctx)
 	if err != nil {
 		panic(err)
 	}
@@ -28,22 +37,22 @@ func main() {
 	var reply int
 
 	// Synchronous call
-	err = proc.Call("Arith.Multiply", args, &reply)
+	err = proc.Call(ctx, "Arith.Multiply", args, &reply)
 	if err != nil {
-		log.Fatal("arith error: ", err)
+		logger.Msgf(log.ERR, "call error: %w", err)
 	}
 	fmt.Printf("Multiply (sync): %d*%d=%d\n", args.A, args.B, reply)
 
 	// Asynchronous call
-	call := proc.Go("Arith.Multiply", args, &reply, nil)
+	call := proc.Go(ctx, "Arith.Multiply", args, &reply, nil)
 	<-call.Done
 	if call.Error != nil {
-		log.Fatal("arith error: ", call.Error)
+		logger.Msgf(log.ERR, "call error: %w", err)
 	}
 	fmt.Printf("Multiply (assync): %d*%d=%d\n", args.A, args.B, reply)
 
 	defer func() {
-		err := proc.Stop(context.TODO())
+		err := proc.Stop(ctx)
 		var exitErr *exec.ExitError
 		if errors.As(err, &exitErr) {
 			fmt.Printf("process exited with code: %d\n", exitErr.ProcessState.ExitCode())

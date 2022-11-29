@@ -5,15 +5,15 @@ reliable and fast CBOR encoding library `github.com/fxamacker/cbor`.
 
 In addition, the `cmd` package provides subprocess RPC-like IPC mechanism through pipelines for easy Go to _
 any_language_ integration. Since Go `net/rpc` is extremely easy to use, it is easy to create a service/server/plugin in
-any language. A Python example is available.
+any language. A Python example is available. The CBOR codec is used for the IPC protocol because the default Go
+RPC [Gob serialization](https://pkg.go.dev/encoding/gob) is not widely available on other languages and runtimes.
 
 ## Example (codec)
 
-The `net/rpc` package is a consistent, stable and easy to use Go RPC mechanism, from the documentation: "The net/rpc
-package is frozen and is not accepting new features." To use the CBOR codec, follow
+The `net/rpc` package is a consistent, stable and easy to use Go RPC mechanism. To use the CBOR codec, follow
 the [net/rpc](https://pkg.go.dev/net/rpc) documentation and use `ClientWithCodec` and `ServeCodec` functions.
 
-Use the `net/rpc` API to perform the calls:
+To perform a call:
 
 ```go
 args := &struct{A, B int}{7, 8}
@@ -24,11 +24,30 @@ client.Call("Arith.Multiply", args, &reply)
 fmt.Printf("Arith: %d*%d=%d", args.A, args.B, reply)
 ```
 
+To implement a service:
+
+```go
+type Arith struct{}
+
+func (t *Arith) Multiply(args *Args, reply *int) error {
+*reply = args.A * args.B
+return nil
+}
+
+func server(codec rpc.ServerCodec) {
+err := rpc.Register(new(Arith))
+rpc.ServeCodec(codec)
+}
+
+// out := ReadWriteCloser (pipe, socket, HTTP connection...)
+go server(codec.NewCBORServerCodec(&out))
+```
+
 ### The protocol
 
-The protocol is binary and very simple, each data is prefixed with size (uint32, little-endian)
+The protocol is binary, each data frame is prefixed with size (uint32, little-endian).
 
-Request:
+**Request**:
 
 | Size (bytes) | Type        | Description              |
 |--------------|-------------|--------------------------|
@@ -37,7 +56,7 @@ Request:
 | 4            | uint32 (LE) | Size of the next block   |
 | ?            | CBOR data   | RPC arguments data frame |
 
-Response:
+**Response**:
 
 | Size (bytes) | Type        | Description              |
 |--------------|-------------|--------------------------|
@@ -51,14 +70,16 @@ Example data frame values:
 * Response header data: `{'Seq': 1, 'ServiceMethod': 'Arith.Multiply', 'Error': ''}}`
 * Response reply data: `56`
 
-Errors are string values.
+Errors are string values, just like in Go. An empty string indicates no error.
 
 ## Example (Python interoperability)
 
 Here is a quick and dirty example on how to use this library to spawn a Python subprocess and communicate with it over
-pipes. For a complete example, see [internal/examples/python](internal/examples/python) directory.
+pipes. Only Go -> Python direction is currently implemented at the moment as this was the reason for my use case,
+contributions are welcome.
 
-It is based on the `net/rpc` package from Go:
+For a complete example, see [internal/examples/python](internal/examples/go-calls-python) directory. An example
+calling **Python subprocess** from Go:
 
 ```go
 package main
@@ -75,20 +96,21 @@ type Args struct {
 }
 
 func main() {
-	proc, _ := cmd.NewCommand(context.TODO(), "python3", "internal/examples/python/service.py")
-	proc.Start(context.TODO())
-	defer proc.Stop(context.TODO())
+	ctx := context.TODO()
+	proc, _ := cmd.NewCommand(ctx, "python3", "internal/examples/go-calls-python/service.py")
+	proc.Start()
+	defer proc.Stop(ctx)
 
 	args := &Args{7, 8}
 	var reply int
 
 	// Synchronous call
-	proc.Call("Arith.Multiply", args, &reply)
+	proc.Call(ctx, "Arith.Multiply", args, &reply)
 
 	fmt.Printf("Multiply (sync): %d*%d=%d\n", args.A, args.B, reply)
 
 	// Asynchronous call
-	call := proc.Go("Arith.Multiply", args, &reply, nil)
+	call := proc.Go(ctx, "Arith.Multiply", args, &reply, nil)
 	<-call.Done
 
 	fmt.Printf("Multiply (assync): %d*%d=%d\n", args.A, args.B, reply)
@@ -97,10 +119,20 @@ func main() {
 
 To implement a subprocess in any language, here is the contract:
 
-* The protocol is binary, make sure to read standard input and write to standard output accordingly.
-* Flush the write buffer after each response.
+* The protocol is binary, do not read standard input and write to standard output in text mode.
+* Flush the write buffer after each response otherwise the communication will get stuck.
 * Check the input for EOF and terminate the program when it's reached.
 * The standard error is being written into the client log, use it for logging.
 * Make sure to synchronize IO when doing concurrent handling (threads).
+* Writing single-thread services is a valid approach, make sure to scale out via multiple processes.
 
-For an example, open [internal/examples/python/server.py](internal/examples/python/server.py).
+For an example, open [internal/examples/python/server.py](internal/examples/go-calls-python/server.py).
+
+## Contributing
+
+This package is frozen and is not accepting new features, however, bug fixes or examples for other languages are
+welcome.
+
+## LICENSE
+
+MIT
