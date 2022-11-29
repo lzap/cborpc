@@ -1,11 +1,11 @@
-= Go net/rpc CBOR codec
+# Go net/rpc CBOR codec
 
 This library provides `codec` package with CBOR (binary JSON) serialization for Go's `net/rpc` package. It uses the
 reliable and fast CBOR encoding library `github.com/fxamacker/cbor`.
 
 In addition, the `cmd` package provides subprocess IPC mechanism through pipelines
 
-== Example (codec)
+## Example (codec)
 
 The `net/rpc` package is a consistent, stable and easy to use Go RPC mechanism, from the documentation: "The net/rpc
 package is frozen and is not accepting new features." To use the CBOR codec, follow
@@ -16,11 +16,13 @@ Use the `net/rpc` API to perform the calls:
 ```go
 args := &struct{A, B int}{7, 8}
 var reply int
+
 client.Call("Arith.Multiply", args, &reply)
+
 fmt.Printf("Arith: %d*%d=%d", args.A, args.B, reply)
 ```
 
-=== The protocol
+### The protocol
 
 The protocol is binary and very simple, each data is prefixed with size (uint32, little-endian)
 
@@ -49,7 +51,7 @@ Example data frame values:
 
 Errors are string values.
 
-== Example (Python interoperability)
+## Example (Python interoperability)
 
 Here is a quick and dirty example on how to use this library to spawn a Python subprocess and communicate with it over
 pipes. For a complete example, see [internal/examples/python](internal/examples/python) directory.
@@ -80,11 +82,13 @@ func main() {
 
 	// Synchronous call
 	proc.Call("Arith.Multiply", args, &reply)
+	
 	fmt.Printf("Multiply (sync): %d*%d=%d\n", args.A, args.B, reply)
 
 	// Asynchronous call
 	call := proc.Go("Arith.Multiply", args, &reply, nil)
 	<-call.Done
+	
 	fmt.Printf("Multiply (assync): %d*%d=%d\n", args.A, args.B, reply)
 }
 ```
