@@ -3,7 +3,9 @@
 This library provides `codec` package with CBOR (binary JSON) serialization for Go's `net/rpc` package. It uses the
 reliable and fast CBOR encoding library `github.com/fxamacker/cbor`.
 
-In addition, the `cmd` package provides subprocess IPC mechanism through pipelines
+In addition, the `cmd` package provides subprocess RPC-like IPC mechanism through pipelines for easy Go to _
+any_language_ integration. Since Go `net/rpc` is extremely easy to use, it is easy to create a service/server/plugin in
+any language. A Python example is available.
 
 ## Example (codec)
 
@@ -82,13 +84,13 @@ func main() {
 
 	// Synchronous call
 	proc.Call("Arith.Multiply", args, &reply)
-	
+
 	fmt.Printf("Multiply (sync): %d*%d=%d\n", args.A, args.B, reply)
 
 	// Asynchronous call
 	call := proc.Go("Arith.Multiply", args, &reply, nil)
 	<-call.Done
-	
+
 	fmt.Printf("Multiply (assync): %d*%d=%d\n", args.A, args.B, reply)
 }
 ```
