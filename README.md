@@ -32,13 +32,13 @@ To implement a service:
 type Arith struct{}
 
 func (t *Arith) Multiply(args *Args, reply *int) error {
-*reply = args.A * args.B
-return nil
+    *reply = args.A * args.B
+    return nil
 }
 
 func server(codec rpc.ServerCodec) {
-err := rpc.Register(new(Arith))
-rpc.ServeCodec(codec)
+    err := rpc.Register(new(Arith))
+    rpc.ServeCodec(codec)
 }
 
 // out := ReadWriteCloser (pipe, socket, HTTP connection...)
