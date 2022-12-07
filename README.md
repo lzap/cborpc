@@ -117,7 +117,7 @@ func main() {
 	call := proc.Go(ctx, "Arith.Multiply", args, &reply, nil)
 	<-call.Done
 
-	fmt.Printf("Multiply (assync): %d*%d=%d\n", args.A, args.B, reply)
+	fmt.Printf("Multiply (async): %d*%d=%d\n", args.A, args.B, reply)
 }
 ```
 
