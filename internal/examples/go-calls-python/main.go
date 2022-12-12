@@ -6,8 +6,9 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+    "time"
 
-	"github.com/lzap/cborpc/cmd"
+    "github.com/lzap/cborpc/cmd"
 	"github.com/lzap/cborpc/log"
 )
 
@@ -36,20 +37,13 @@ func main() {
 	args := &Args{7, 8}
 	var reply int
 
-	// Synchronous call
+    ctx, cancel := context.WithTimeout(ctx, time.Second)
+    defer cancel()
 	err = proc.Call(ctx, "Arith.Multiply", args, &reply)
 	if err != nil {
 		logger.Msgf(log.ERR, "call error: %w", err)
 	}
-	fmt.Printf("Multiply (sync): %d*%d=%d\n", args.A, args.B, reply)
-
-	// Asynchronous call
-	call := proc.Go(ctx, "Arith.Multiply", args, &reply, nil)
-	<-call.Done
-	if call.Error != nil {
-		logger.Msgf(log.ERR, "call error: %w", err)
-	}
-	fmt.Printf("Multiply (assync): %d*%d=%d\n", args.A, args.B, reply)
+	fmt.Printf("Multiply: %d*%d=%d\n", args.A, args.B, reply)
 
 	defer func() {
 		err := proc.Stop(ctx)

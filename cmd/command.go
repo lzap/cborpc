@@ -7,7 +7,8 @@ import (
 	"io"
 	"net/rpc"
 	"os/exec"
-	"syscall"
+    "sync"
+    "syscall"
 	"time"
 
 	"github.com/lzap/cborpc/codec"
@@ -39,6 +40,7 @@ type Command struct {
 	stdin  io.WriteCloser
 	stderr io.ReadCloser
 	client *rpc.Client
+    inflightWG sync.WaitGroup
 }
 
 func NewCommand(ctx context.Context, name string, arg ...string) (*Command, error) {
@@ -97,8 +99,12 @@ func (cmd *Command) readerStderr(ctx context.Context) {
 	}
 }
 
+// Stop for all "in flight" calls to be finished first, then it closes the pipe
+// and sends termination signal to the subprocess and waits until the process exits.
 func (cmd *Command) Stop(ctx context.Context) error {
-	logger := log.ContextLogger(ctx)
+    cmd.inflightWG.Wait()
+
+    logger := log.ContextLogger(ctx)
 	logger.Msgf(log.TRC, "Stopping RPC client, terminating process, waiting for data")
 	defer logger.Msgf(log.TRC, "All data processed")
 
@@ -116,27 +122,25 @@ func (cmd *Command) Stop(ctx context.Context) error {
 	return err
 }
 
+// Call performs RPC call, the context is not propagated to the server. It should be used for
+// client-only timeout. Since contexts are not passed to the server, the call will continue
+// execution on the server even if the client was already cancelled and possibly can block
+// other subsequent calls.
 func (cmd *Command) Call(ctx context.Context, serviceMethod string, args any, reply any) error {
+    cmd.inflightWG.Add(1)
 	logger := log.ContextLogger(ctx)
 	start := time.Now()
 	logger.Msgf(log.TRC, "Call: %s started", serviceMethod)
-	defer logger.Msgf(log.TRC, "Call: %s finished, duration: %s", serviceMethod, time.Since(start))
+    defer func() {
+        logger.Msgf(log.TRC, "Call: %s finished, duration: %s", serviceMethod, time.Since(start))
+        cmd.inflightWG.Done()
+    }()
 
-	err := cmd.client.Call(serviceMethod, args, reply)
-	if err != nil {
-		logger.Msgf(log.WRN, "Call: %s returned an error %s", serviceMethod, err.Error())
+	call := cmd.client.Go(serviceMethod, args, reply, make(chan *rpc.Call, 1))
+	select {
+	case <-call.Done:
+		return call.Error
+	case <-ctx.Done():
+		return ctx.Err()
 	}
-
-	return err
-}
-
-func (cmd *Command) Go(ctx context.Context, serviceMethod string, args any, reply any, done chan *rpc.Call) *rpc.Call {
-	logger := log.ContextLogger(ctx)
-	start := time.Now()
-	logger.Msgf(log.TRC, "Do: %s started", serviceMethod)
-	defer logger.Msgf(log.TRC, "Call: %s finished, duration: %s", serviceMethod, time.Since(start))
-
-	call := cmd.client.Go(serviceMethod, args, reply, done)
-
-	return call
 }

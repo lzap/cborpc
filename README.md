@@ -107,19 +107,13 @@ func main() {
 
 	args := &Args{7, 8}
 	var reply int
-
-	// Synchronous call
 	proc.Call(ctx, "Arith.Multiply", args, &reply)
 
-	fmt.Printf("Multiply (sync): %d*%d=%d\n", args.A, args.B, reply)
-
-	// Asynchronous call
-	call := proc.Go(ctx, "Arith.Multiply", args, &reply, nil)
-	<-call.Done
-
-	fmt.Printf("Multiply (async): %d*%d=%d\n", args.A, args.B, reply)
+	fmt.Printf("Multiply: %d*%d=%d\n", args.A, args.B, reply)
 }
 ```
+
+It is recommended to use `context.Context` cancellation in the client to avoid locks.
 
 To implement a subprocess in any language, here is the contract:
 

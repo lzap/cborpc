@@ -2,7 +2,6 @@ package codec_test
 
 import (
 	"errors"
-	"fmt"
 	"io"
 	"net/rpc"
 	"sync"
@@ -85,22 +84,5 @@ func TestMultiplySync(t *testing.T) {
 	}
 	if reply != 56 {
 		t.Fatalf("result is incorrect: %d", reply)
-	}
-}
-
-func TestDivideAsync(t *testing.T) {
-	serverOnce.Do(setup)
-
-	args := &Args{7, 8}
-	quotient := new(Quotient)
-	divCall := client.Go("Arith.Divide", args, quotient, nil)
-	<-divCall.Done
-	fmt.Printf("Divide (async): %d/%d=%+v\n", args.A, args.B, quotient)
-
-	if divCall.Error != nil {
-		t.Fatal(divCall.Error)
-	}
-	if quotient.Quo != 0 && quotient.Rem != 7 {
-		t.Fatalf("result is incorrect: %+v", quotient)
 	}
 }
